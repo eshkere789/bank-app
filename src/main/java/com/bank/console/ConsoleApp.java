@@ -54,56 +54,74 @@ public class ConsoleApp {
         System.out.println("=== Консольное банковское приложение ===");
         boolean running = true;
         while (running) {
-            printMenu();
-            String choice = scanner.nextLine().trim();
-            try {
-                switch (choice) {
-                    case "1" -> registerCustomer();
-                    case "2" -> openDeposit();
-                    case "3" -> depositMoney();
-                    case "4" -> withdrawMoney();
-                    case "5" -> transferBetweenDeposits();
-                    case "6" -> simulateMonths();
-                    case "7" -> simulateToDate();
-                    case "8" -> closeDepositEarly();
-                    case "9" -> showStatement();
-                    case "10" -> showCustomerAccounts();
-                    case "11" -> listCustomers();
-                    case "12" -> openCredit();
-                    case "13" -> simulateCreditRepayment();
-                    case "14" -> showCustomerCredits();
-                    case "0" -> {
-                        running = false;
-                        System.out.println("До свидания!");
-                    }
-                    default -> System.out.println("Неизвестный пункт меню.");
+            System.out.println();
+            System.out.println("1. Клиенты");
+            System.out.println("2. Депозиты");
+            System.out.println("3. Кредиты");
+            System.out.println("4. Симуляция времени");
+            System.out.println("0. Выход");
+            System.out.print("Выберите раздел: ");
+            switch (scanner.nextLine().trim()) {
+                case "1" -> submenu("Клиенты",
+                        new String[]{"Зарегистрировать клиента", "Список всех клиентов"},
+                        this::registerCustomer, this::listCustomers);
+                case "2" -> submenu("Депозиты",
+                        new String[]{"Открыть депозит", "Пополнить", "Снять", "Перевод между депозитами",
+                                "Досрочно закрыть", "Выписка по депозиту", "Депозиты клиента"},
+                        this::openDeposit, this::depositMoney, this::withdrawMoney,
+                        this::transferBetweenDeposits, this::closeDepositEarly,
+                        this::showStatement, this::showCustomerAccounts);
+                case "3" -> submenu("Кредиты",
+                        new String[]{"Оформить кредит", "Кредиты клиента"},
+                        this::openCredit, this::showCustomerCredits);
+                case "4" -> submenu("Симуляция времени",
+                        new String[]{"Депозит: прогнать N месяцев", "Депозит: прогнать до даты (yyyy-MM-dd)",
+                                "Кредит: прогнать погашение N месяцев"},
+                        this::simulateMonths, this::simulateToDate, this::simulateCreditRepayment);
+                case "0" -> {
+                    running = false;
+                    System.out.println("До свидания!");
                 }
+                default -> System.out.println("Неизвестный пункт меню.");
+            }
+        }
+    }
+
+    /**
+     * Подменю раздела: остаётся открытым, пока не выбран "0. Назад",
+     * поэтому несколько операций подряд не требуют возвращения в главное меню.
+     */
+    private void submenu(String title, String[] labels, Runnable... actions) {
+        while (true) {
+            System.out.println();
+            System.out.println("--- " + title + " ---");
+            for (int i = 0; i < labels.length; i++) {
+                System.out.println((i + 1) + ". " + labels[i]);
+            }
+            System.out.println("0. Назад");
+            System.out.print("Выберите пункт: ");
+            String choice = scanner.nextLine().trim();
+            if (choice.equals("0")) {
+                return;
+            }
+            int index;
+            try {
+                index = Integer.parseInt(choice) - 1;
+            } catch (NumberFormatException e) {
+                index = -1;
+            }
+            if (index < 0 || index >= actions.length) {
+                System.out.println("Неизвестный пункт меню.");
+                continue;
+            }
+            try {
+                actions[index].run();
             } catch (BankException e) {
                 System.out.println("Ошибка: " + e.getMessage());
             } catch (Exception e) {
                 System.out.println("Некорректный ввод: " + e.getMessage());
             }
         }
-    }
-
-    private void printMenu() {
-        System.out.println();
-        System.out.println("1.  Зарегистрировать клиента");
-        System.out.println("2.  Открыть депозит");
-        System.out.println("3.  Пополнить депозит");
-        System.out.println("4.  Снять с депозита");
-        System.out.println("5.  Перевод между депозитами");
-        System.out.println("6.  Симулировать N месяцев");
-        System.out.println("7.  Симулировать до даты (yyyy-MM-dd)");
-        System.out.println("8.  Досрочно закрыть депозит");
-        System.out.println("9.  Выписка по депозиту");
-        System.out.println("10. Депозиты клиента");
-        System.out.println("11. Список всех клиентов");
-        System.out.println("12. Оформить кредит");
-        System.out.println("13. Симулировать погашение кредита (N месяцев)");
-        System.out.println("14. Кредиты клиента");
-        System.out.println("0.  Выход");
-        System.out.print("Выберите пункт: ");
     }
 
     private void registerCustomer() {
