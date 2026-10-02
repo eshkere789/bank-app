@@ -4,7 +4,6 @@ import com.bank.exception.InvalidDepositTermException;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.nio.channels.IllegalSelectorException;
 import java.time.LocalDate;
 import java.util.Set;
 
@@ -36,8 +35,8 @@ public abstract class DepositAccount extends Account {
     private DepositStatus status = DepositStatus.ACTIVE;
 
     protected DepositAccount(long accountId, String accountNumber, long customerId,
-            BigDecimal initialBalance, BigDecimal interestRate,
-            int termMonths, LocalDate openDate) {
+                              BigDecimal initialBalance, BigDecimal interestRate,
+                              int termMonths, LocalDate openDate) {
         super(accountId, accountNumber, customerId, initialBalance);
         if (!ALLOWED_TERMS_MONTHS.contains(termMonths)) {
             throw new InvalidDepositTermException(
@@ -130,7 +129,7 @@ public abstract class DepositAccount extends Account {
                     "Депозит уже отработал полный срок (" + termMonths + " мес.) — "
                             + "используйте закрытие по окончании срока, проценты не сгорают");
         }
-        BigDecimal forfeited = accruedInterestTotal;
+        BigDecimal forfeited = accruedInterestTotal.min(balance);
         if (forfeited.signum() > 0) {
             this.balance = this.balance.subtract(forfeited);
             this.accruedInterestTotal = BigDecimal.ZERO;
@@ -139,10 +138,15 @@ public abstract class DepositAccount extends Account {
         return forfeited;
     }
 
-    /**
-     * Закрытие по окончании срока — начисленные проценты СОХРАНЯЮТСЯ (в отличие от
-     * досрочного).
-     */
+    @Override
+    public void block() {
+        super.block();
+        if (status == DepositStatus.ACTIVE) {
+            this.status = DepositStatus.BLOCKED;
+        }
+    }
+
+    /** Закрытие по окончании срока — начисленные проценты СОХРАНЯЮТСЯ (в отличие от досрочного). */
     public void closeAtMaturity() {
         if (status != DepositStatus.ACTIVE) {
             throw new IllegalStateException("Депозит уже закрыт: " + status);
