@@ -3,6 +3,7 @@ package com.bank.service;
 import com.bank.domain.account.Account;
 import com.bank.domain.credit.Credit;
 import com.bank.domain.credit.CreditStatus;
+import com.bank.domain.currency.Currency;
 import com.bank.exception.CreditException;
 import com.bank.repository.CreditRepository;
 
@@ -37,8 +38,11 @@ public class CreditService {
         if (repaymentAccount.getCustomerId() != customerId) {
             throw new CreditException("Счёт списания принадлежит другому клиенту");
         }
+        if (repaymentAccount.getCurrency() != Currency.KZT) {
+            throw new CreditException("Кредит выдаётся в тенге — счёт списания тоже должен быть в тенге (KZT)");
+        }
         if (!repaymentAccount.isWithdrawalAllowed()) {
-            throw new CreditException("Счёт списания должен разрешать снятие (депозит с правом снятия)");
+            throw new CreditException("Счёт списания должен разрешать снятие (текущий счёт или депозит с правом снятия)");
         }
         if (repaymentAccount.isBlocked()) {
             throw new CreditException("Счёт списания заблокирован");

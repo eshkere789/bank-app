@@ -2,9 +2,12 @@ package com.bank.service;
 
 import com.bank.domain.account.Account;
 import com.bank.domain.account.AccumulativeDepositAccount;
+import com.bank.domain.account.CurrentAccount;
 import com.bank.domain.account.DepositAccount;
 import com.bank.domain.account.DepositType;
+import com.bank.domain.account.MultiCurrencyAccount;
 import com.bank.domain.account.WithdrawableDepositAccount;
+import com.bank.domain.currency.Currency;
 import com.bank.domain.transaction.Transaction;
 import com.bank.domain.transaction.TransactionType;
 import com.bank.exception.AccountNotFoundException;
@@ -37,23 +40,51 @@ public class AccountService {
         this.idGenerator = idGenerator;
     }
 
+    public CurrentAccount openCurrentAccount(long customerId, BigDecimal initialBalance) {
+        CurrentAccount account = new CurrentAccount(
+                idGenerator.nextAccountId(), idGenerator.nextAccountNumber("CA"), customerId, initialBalance);
+        return (CurrentAccount) accountRepository.save(account);
+    }
+
+    public MultiCurrencyAccount openMultiCurrencyAccount(long customerId, Currency currency,
+                                                           BigDecimal initialBalance) {
+        MultiCurrencyAccount account = new MultiCurrencyAccount(
+                idGenerator.nextAccountId(), idGenerator.nextAccountNumber("MC"),
+                customerId, currency, initialBalance);
+        return (MultiCurrencyAccount) accountRepository.save(account);
+    }
+
+    /** Депозит в тенге. */
     public WithdrawableDepositAccount openWithdrawableDeposit(long customerId, BigDecimal initialBalance,
                                                                 int termMonths, LocalDate openDate) {
+        return openWithdrawableDeposit(customerId, initialBalance, termMonths, openDate, Currency.KZT);
+    }
+
+    public WithdrawableDepositAccount openWithdrawableDeposit(long customerId, BigDecimal initialBalance,
+                                                                int termMonths, LocalDate openDate,
+                                                                Currency currency) {
         BigDecimal rate = InterestRateSchedule.rateFor(DepositType.WITHDRAWABLE, termMonths);
         long accountId = idGenerator.nextAccountId();
         String accountNumber = idGenerator.nextAccountNumber("WD");
         WithdrawableDepositAccount account = new WithdrawableDepositAccount(
-                accountId, accountNumber, customerId, initialBalance, rate, termMonths, openDate);
+                accountId, accountNumber, customerId, currency, initialBalance, rate, termMonths, openDate);
         return (WithdrawableDepositAccount) accountRepository.save(account);
     }
 
+    /** Депозит в тенге. */
     public AccumulativeDepositAccount openAccumulativeDeposit(long customerId, BigDecimal initialBalance,
-                                                                int termMonths, LocalDate openDate) {
+                                                                 int termMonths, LocalDate openDate) {
+        return openAccumulativeDeposit(customerId, initialBalance, termMonths, openDate, Currency.KZT);
+    }
+
+    public AccumulativeDepositAccount openAccumulativeDeposit(long customerId, BigDecimal initialBalance,
+                                                                 int termMonths, LocalDate openDate,
+                                                                 Currency currency) {
         BigDecimal rate = InterestRateSchedule.rateFor(DepositType.ACCUMULATIVE, termMonths);
         long accountId = idGenerator.nextAccountId();
         String accountNumber = idGenerator.nextAccountNumber("AC");
         AccumulativeDepositAccount account = new AccumulativeDepositAccount(
-                accountId, accountNumber, customerId, initialBalance, rate, termMonths, openDate);
+                accountId, accountNumber, customerId, currency, initialBalance, rate, termMonths, openDate);
         return (AccumulativeDepositAccount) accountRepository.save(account);
     }
 
@@ -107,7 +138,7 @@ public class AccountService {
                                            BigDecimal amount, String description) {
         Transaction transaction = new Transaction(
                 idGenerator.nextTransactionId(), account.getAccountId(), type,
-                amount, LocalDateTime.now(), description);
+                amount, account.getCurrency(), LocalDateTime.now(), description);
         transactionRepository.save(transaction);
         account.addTransaction(transaction);
         return transaction;

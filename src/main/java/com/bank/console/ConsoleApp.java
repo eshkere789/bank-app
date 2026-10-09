@@ -4,6 +4,7 @@ import com.bank.domain.account.Account;
 import com.bank.domain.account.DepositAccount;
 import com.bank.domain.credit.Credit;
 import com.bank.domain.credit.CreditStatus;
+import com.bank.domain.currency.Currency;
 import com.bank.domain.customer.ContactType;
 import com.bank.domain.customer.Customer;
 import com.bank.domain.transaction.Transaction;
@@ -13,6 +14,7 @@ import com.bank.service.AccountService;
 import com.bank.service.CreditRepaymentService;
 import com.bank.service.CreditService;
 import com.bank.service.CustomerService;
+import com.bank.service.ExchangeRateService;
 import com.bank.service.IdGeneratorService;
 import com.bank.service.InterestAccrualService;
 import com.bank.service.TransferService;
@@ -37,18 +39,21 @@ public class ConsoleApp {
     private final IdGeneratorService idGenerator = new IdGeneratorService();
     private final InMemoryDatabase database = new InMemoryDatabase();
 
+    private final ExchangeRateService exchangeRateService = new ExchangeRateService();
+
     private final CustomerService customerService =
             new CustomerService(database.customers(), idGenerator);
     private final AccountService accountService =
             new AccountService(database.accounts(), database.transactions(), idGenerator);
     private final TransferService transferService =
-            new TransferService(accountService, database.transactions(), idGenerator);
+            new TransferService(accountService, database.transactions(), idGenerator, exchangeRateService);
     private final InterestAccrualService interestAccrualService =
             new InterestAccrualService(database.transactions(), idGenerator);
     private final CreditService creditService =
             new CreditService(database.credits(), accountService, customerService, idGenerator);
     private final CreditRepaymentService creditRepaymentService =
-            new CreditRepaymentService(creditService, accountService, database.transactions(), idGenerator);
+            new CreditRepaymentService(creditService, accountService, database.transactions(), idGenerator,
+                    exchangeRateService);
 
     public void run() {
         System.out.println("=== Консольное банковское приложение ===");
@@ -56,28 +61,37 @@ public class ConsoleApp {
         while (running) {
             System.out.println();
             System.out.println("1. Клиенты");
-            System.out.println("2. Депозиты");
-            System.out.println("3. Кредиты");
-            System.out.println("4. Симуляция времени");
+            System.out.println("2. Счета и переводы");
+            System.out.println("3. Депозиты");
+            System.out.println("4. Кредиты");
+            System.out.println("5. Симуляция времени");
+            System.out.println("6. Курсы валют");
             System.out.println("0. Выход");
             System.out.print("Выберите раздел: ");
             switch (scanner.nextLine().trim()) {
                 case "1" -> submenu("Клиенты",
                         new String[]{"Зарегистрировать клиента", "Список всех клиентов"},
                         this::registerCustomer, this::listCustomers);
-                case "2" -> submenu("Депозиты",
-                        new String[]{"Открыть депозит", "Пополнить", "Снять", "Перевод между депозитами",
-                                "Досрочно закрыть", "Выписка по депозиту", "Депозиты клиента"},
-                        this::openDeposit, this::depositMoney, this::withdrawMoney,
-                        this::transferBetweenDeposits, this::closeDepositEarly,
+                case "2" -> submenu("Счета и переводы",
+                        new String[]{"Открыть текущий счёт (тенге)", "Открыть мультивалютный счёт (USD/EUR)",
+                                "Пополнить счёт", "Снять со счёта", "Перевод между счетами (с конвертацией)",
+                                "Выписка по счёту", "Все счета клиента"},
+                        this::openCurrentAccount, this::openMultiCurrencyAccount,
+                        this::depositMoney, this::withdrawMoney, this::transferBetweenAccounts,
                         this::showStatement, this::showCustomerAccounts);
-                case "3" -> submenu("Кредиты",
+                case "3" -> submenu("Депозиты",
+                        new String[]{"Открыть депозит", "Досрочно закрыть депозит"},
+                        this::openDeposit, this::closeDepositEarly);
+                case "4" -> submenu("Кредиты",
                         new String[]{"Оформить кредит", "Кредиты клиента"},
                         this::openCredit, this::showCustomerCredits);
-                case "4" -> submenu("Симуляция времени",
+                case "5" -> submenu("Симуляция времени",
                         new String[]{"Депозит: прогнать N месяцев", "Депозит: прогнать до даты (yyyy-MM-dd)",
                                 "Кредит: прогнать погашение N месяцев"},
                         this::simulateMonths, this::simulateToDate, this::simulateCreditRepayment);
+                case "6" -> submenu("Курсы валют",
+                        new String[]{"Показать курсы", "Изменить курс"},
+                        this::showRates, this::setRate);
                 case "0" -> {
                     running = false;
                     System.out.println("До свидания!");
@@ -159,17 +173,18 @@ public class ConsoleApp {
         String balanceInput = scanner.nextLine().trim();
         BigDecimal initialBalance = balanceInput.isBlank() ? null : new BigDecimal(balanceInput);
 
+        Currency currency = readCurrency(true);
         LocalDate openDate = LocalDate.now();
 
         Account account = switch (typeChoice) {
-            case "1" -> accountService.openWithdrawableDeposit(customerId, initialBalance, termMonths, openDate);
-            case "2" -> accountService.openAccumulativeDeposit(customerId, initialBalance, termMonths, openDate);
+            case "1" -> accountService.openWithdrawableDeposit(customerId, initialBalance, termMonths, openDate, currency);
+            case "2" -> accountService.openAccumulativeDeposit(customerId, initialBalance, termMonths, openDate, currency);
             default -> throw new IllegalArgumentException("Неверный выбор типа депозита");
         };
 
         DepositAccount deposit = (DepositAccount) account;
-        System.out.printf("Депозит открыт: %s, ставка=%s%%, дата открытия=%s, дата окончания=%s%n",
-                deposit.getAccountNumber(), deposit.getInterestRate(), deposit.getOpenDate(), deposit.getEndDate());
+        System.out.printf("Депозит открыт: %s (%s), ставка=%s%%, дата открытия=%s, дата окончания=%s%n",
+                deposit.getAccountNumber(), deposit.getCurrency(), deposit.getInterestRate(), deposit.getOpenDate(), deposit.getEndDate());
     }
 
     private void depositMoney() {
@@ -186,14 +201,67 @@ public class ConsoleApp {
         System.out.println("Готово: " + t);
     }
 
-    private void transferBetweenDeposits() {
+    private void transferBetweenAccounts() {
         System.out.print("ID счёта-источника: ");
         long fromId = Long.parseLong(scanner.nextLine().trim());
         System.out.print("ID счёта-получателя: ");
         long toId = Long.parseLong(scanner.nextLine().trim());
-        BigDecimal amount = readAmount("Сумма перевода: ");
-        transferService.transfer(fromId, toId, amount);
-        System.out.println("Перевод выполнен.");
+        Account from = accountService.getById(fromId);
+        Account to = accountService.getById(toId);
+
+        BigDecimal amount = readAmount("Сумма перевода (в " + from.getCurrency() + "): ");
+        BigDecimal credited = transferService.transfer(fromId, toId, amount);
+
+        if (from.getCurrency() == to.getCurrency()) {
+            System.out.printf("Перевод выполнен: %s %s%n", MoneyUtils.normalize(amount), from.getCurrency());
+        } else {
+            StringBuilder rates = new StringBuilder();
+            for (Currency c : new Currency[]{from.getCurrency(), to.getCurrency()}) {
+                if (c != Currency.KZT) {
+                    rates.append(rates.length() > 0 ? ", " : "")
+                            .append("1 ").append(c).append(" = ")
+                            .append(MoneyUtils.normalize(exchangeRateService.getRate(c))).append(" KZT");
+                }
+            }
+            System.out.printf("Перевод выполнен: списано %s %s → зачислено %s %s (курс: %s)%n",
+                    MoneyUtils.normalize(amount), from.getCurrency(),
+                    MoneyUtils.normalize(credited), to.getCurrency(), rates);
+        }
+    }
+
+    private void openCurrentAccount() {
+        System.out.print("ID клиента: ");
+        long customerId = Long.parseLong(scanner.nextLine().trim());
+        customerService.getById(customerId);
+        BigDecimal initialBalance = readInitialBalance();
+        Account account = accountService.openCurrentAccount(customerId, initialBalance);
+        System.out.println("Текущий счёт открыт: " + describe(account));
+    }
+
+    private void openMultiCurrencyAccount() {
+        System.out.print("ID клиента: ");
+        long customerId = Long.parseLong(scanner.nextLine().trim());
+        customerService.getById(customerId);
+        Currency currency = readCurrency(false);
+        BigDecimal initialBalance = readInitialBalance();
+        Account account = accountService.openMultiCurrencyAccount(customerId, currency, initialBalance);
+        System.out.println("Мультивалютный счёт открыт: " + describe(account));
+    }
+
+    private void showRates() {
+        for (Currency currency : Currency.values()) {
+            if (currency != Currency.KZT) {
+                System.out.println("1 " + currency + " = "
+                        + MoneyUtils.normalize(exchangeRateService.getRate(currency)) + " KZT");
+            }
+        }
+    }
+
+    private void setRate() {
+        Currency currency = readCurrency(false);
+        BigDecimal rate = readAmount("Новый курс (тенге за 1 " + currency + "): ");
+        exchangeRateService.setRate(currency, rate);
+        System.out.println("Курс обновлён: 1 " + currency + " = " + MoneyUtils.normalize(rate) + " KZT");
     }
 
     private void simulateMonths() {
@@ -203,7 +271,7 @@ public class ConsoleApp {
         DepositAccount deposit = accountService.getDepositById(accountId);
         List<Transaction> accruals = interestAccrualService.simulateMonths(deposit, months);
         TransactionFormatter.printGrouped(accruals, "  ");
-        System.out.println("Текущий баланс: " + MoneyUtils.normalize(deposit.getBalance()));
+        System.out.println("Текущий баланс: " + MoneyUtils.normalize(deposit.getBalance()) + " " + deposit.getCurrency());
     }
 
     private void simulateToDate() {
@@ -213,21 +281,21 @@ public class ConsoleApp {
         DepositAccount deposit = accountService.getDepositById(accountId);
         List<Transaction> accruals = interestAccrualService.simulateToDate(deposit, date);
         TransactionFormatter.printGrouped(accruals, "  ");
-        System.out.println("Текущий баланс: " + MoneyUtils.normalize(deposit.getBalance()));
+        System.out.println("Текущий баланс: " + MoneyUtils.normalize(deposit.getBalance()) + " " + deposit.getCurrency());
     }
 
     private void closeDepositEarly() {
         long accountId = readAccountId();
         DepositAccount deposit = accountService.closeDepositEarly(accountId);
         System.out.println("Депозит " + deposit.getAccountNumber() + " закрыт досрочно. Баланс: "
-                + MoneyUtils.normalize(deposit.getBalance()));
+                + MoneyUtils.normalize(deposit.getBalance()) + " " + deposit.getCurrency());
     }
 
     private void showStatement() {
         long accountId = readAccountId();
         Account account = accountService.getById(accountId);
-        System.out.println("Счёт: " + account.getAccountNumber() + ", баланс: "
-                + MoneyUtils.normalize(account.getBalance()));
+        System.out.println("Счёт: " + account.getAccountNumber() + " (" + account.getAccountType() + "), баланс: "
+                + MoneyUtils.normalize(account.getBalance()) + " " + account.getCurrency());
         TransactionFormatter.printGrouped(account.getTransactions(), "  ");
     }
 
@@ -236,7 +304,7 @@ public class ConsoleApp {
         long customerId = Long.parseLong(scanner.nextLine().trim());
         List<Account> accounts = accountService.getAccountsByCustomer(customerId);
         if (accounts.isEmpty()) {
-            System.out.println("Депозитов не найдено.");
+            System.out.println("Счетов не найдено.");
             return;
         }
         for (Account account : accounts) {
@@ -256,7 +324,7 @@ public class ConsoleApp {
     private void openCredit() {
         System.out.print("ID клиента: ");
         long customerId = Long.parseLong(scanner.nextLine().trim());
-        System.out.print("ID счёта списания (депозит с правом снятия): ");
+        System.out.print("ID счёта списания (в тенге, с правом снятия): ");
         long accountId = Long.parseLong(scanner.nextLine().trim());
         BigDecimal amount = readAmount("Сумма кредита: ");
         System.out.print("Срок кредита в месяцах (6, 12, 24 или 36): ");
@@ -311,11 +379,38 @@ public class ConsoleApp {
     private String describe(Account account) {
         if (account instanceof DepositAccount d) {
             return String.format(
-                    "%s | тип=%s | ставка=%s%% | срок=%d мес | открыт=%s | закрывается=%s | статус=%s | баланс=%s",
-                    d.getAccountNumber(), d.getDepositType(), d.getInterestRate(), d.getTermMonths(),
+                    "%s | тип=%s | валюта=%s | ставка=%s%% | срок=%d мес | открыт=%s | закрывается=%s | статус=%s | баланс=%s",
+                    d.getAccountNumber(), d.getAccountType(), d.getCurrency(), d.getInterestRate(), d.getTermMonths(),
                     d.getOpenDate(), d.getEndDate(), d.getStatus(), MoneyUtils.normalize(d.getBalance()));
         }
-        return account.getAccountNumber() + " | баланс=" + MoneyUtils.normalize(account.getBalance());
+        return String.format("%s | тип=%s | валюта=%s | баланс=%s%s",
+                account.getAccountNumber(), account.getAccountType(), account.getCurrency(),
+                MoneyUtils.normalize(account.getBalance()), account.isBlocked() ? " | ЗАБЛОКИРОВАН" : "");
+    }
+
+    /** @param allowKzt true — депозит (KZT/USD/EUR), false — мультивалютный счёт и курсы (USD/EUR) */
+    private Currency readCurrency(boolean allowKzt) {
+        System.out.print(allowKzt ? "Валюта (1-KZT, 2-USD, 3-EUR): " : "Валюта (1-USD, 2-EUR): ");
+        String choice = scanner.nextLine().trim();
+        if (allowKzt) {
+            return switch (choice) {
+                case "1" -> Currency.KZT;
+                case "2" -> Currency.USD;
+                case "3" -> Currency.EUR;
+                default -> throw new IllegalArgumentException("Неверный выбор валюты");
+            };
+        }
+        return switch (choice) {
+            case "1" -> Currency.USD;
+            case "2" -> Currency.EUR;
+            default -> throw new IllegalArgumentException("Неверный выбор валюты");
+        };
+    }
+
+    private BigDecimal readInitialBalance() {
+        System.out.print("Начальная сумма (Enter — 0): ");
+        String input = scanner.nextLine().trim();
+        return input.isBlank() ? null : new BigDecimal(input);
     }
 
     private long readAccountId() {

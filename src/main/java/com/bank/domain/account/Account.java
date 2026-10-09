@@ -1,5 +1,6 @@
 package com.bank.domain.account;
 
+import com.bank.domain.currency.Currency;
 import com.bank.domain.transaction.Transaction;
 import com.bank.exception.AccountBlockedException;
 import com.bank.exception.InsufficientFundsException;
@@ -11,6 +12,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Базовый банковский счёт.
@@ -27,21 +29,24 @@ public abstract class Account {
     protected final long accountId;
     protected final String accountNumber;
     protected final long customerId;
+    protected final Currency currency;
     protected BigDecimal balance;
     protected final LocalDateTime createdAt;
     protected final List<Transaction> transactions = new ArrayList<>();
     private boolean blocked = false;
 
-    protected Account(long accountId, String accountNumber, long customerId, BigDecimal initialBalance) {
+    protected Account(long accountId, String accountNumber, long customerId,
+                      Currency currency, BigDecimal initialBalance) {
         this.accountId = accountId;
         this.accountNumber = accountNumber;
         this.customerId = customerId;
+        this.currency = Objects.requireNonNull(currency, "currency");
         // Требование: BigDecimal.ZERO, если баланс не передан явно
         this.balance = initialBalance != null ? initialBalance : BigDecimal.ZERO;
         this.createdAt = LocalDateTime.now();
     }
 
-    public abstract DepositType getDepositType();
+    public abstract AccountType getAccountType();
 
     public abstract boolean isWithdrawalAllowed();
 
@@ -55,6 +60,10 @@ public abstract class Account {
 
     public long getCustomerId() {
         return customerId;
+    }
+
+    public Currency getCurrency() {
+        return currency;
     }
 
     public BigDecimal getBalance() {
@@ -85,7 +94,7 @@ public abstract class Account {
         ensureNotBlocked();
         if (!isWithdrawalAllowed()) {
             throw new WithdrawalNotAllowedException(
-                    "Снятие средств запрещено для счёта " + accountNumber + " (тип: " + getDepositType() + ")");
+                    "Снятие средств запрещено для счёта " + accountNumber + " (тип: " + getAccountType() + ")");
         }
         validatePositive(amount);
         if (balance.compareTo(amount) < 0) {

@@ -1,5 +1,6 @@
 package com.bank.domain.account;
 
+import com.bank.domain.currency.Currency;
 import com.bank.exception.InvalidDepositTermException;
 
 import java.math.BigDecimal;
@@ -34,10 +35,10 @@ public abstract class DepositAccount extends Account {
     private BigDecimal accruedInterestTotal = BigDecimal.ZERO;
     private DepositStatus status = DepositStatus.ACTIVE;
 
-    protected DepositAccount(long accountId, String accountNumber, long customerId,
+    protected DepositAccount(long accountId, String accountNumber, long customerId, Currency currency,
                               BigDecimal initialBalance, BigDecimal interestRate,
                               int termMonths, LocalDate openDate) {
-        super(accountId, accountNumber, customerId, initialBalance);
+        super(accountId, accountNumber, customerId, currency, initialBalance);
         if (!ALLOWED_TERMS_MONTHS.contains(termMonths)) {
             throw new InvalidDepositTermException(
                     "Недопустимый срок депозита: " + termMonths + " мес. Разрешено: " + ALLOWED_TERMS_MONTHS);
@@ -46,6 +47,16 @@ public abstract class DepositAccount extends Account {
         this.termMonths = termMonths;
         this.openDate = openDate;
         this.endDate = openDate.plusMonths(termMonths); // авто-расчёт даты окончания
+    }
+
+    /** Вид депозита (с правом снятия / без него) — определяют наследники. */
+    public abstract DepositType getDepositType();
+
+    @Override
+    public AccountType getAccountType() {
+        return getDepositType() == DepositType.WITHDRAWABLE
+                ? AccountType.DEPOSIT_WITHDRAWABLE
+                : AccountType.DEPOSIT_ACCUMULATIVE;
     }
 
     public BigDecimal getInterestRate() {

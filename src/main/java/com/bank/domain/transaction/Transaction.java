@@ -1,6 +1,9 @@
 package com.bank.domain.transaction;
 
+import com.bank.domain.currency.Currency;
+
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 
 /**
@@ -15,15 +18,17 @@ public final class Transaction {
     private final long accountId;
     private final TransactionType type;
     private final BigDecimal amount;
+    private final Currency currency;
     private final LocalDateTime timestamp;
     private final String description;
 
     public Transaction(long transactionId, long accountId, TransactionType type,
-                        BigDecimal amount, LocalDateTime timestamp, String description) {
+                        BigDecimal amount, Currency currency, LocalDateTime timestamp, String description) {
         this.transactionId = transactionId;
         this.accountId = accountId;
         this.type = type;
         this.amount = amount;
+        this.currency = currency;
         this.timestamp = timestamp;
         this.description = description;
     }
@@ -44,6 +49,10 @@ public final class Transaction {
         return amount;
     }
 
+    public Currency getCurrency() {
+        return currency;
+    }
+
     public LocalDateTime getTimestamp() {
         return timestamp;
     }
@@ -54,7 +63,7 @@ public final class Transaction {
 
     @Override
     public String toString() {
-        return String.format("#%d [%s] %s%s %s (%s)",
-                transactionId, timestamp, amount.signum() >= 0 ? "+" : "", amount, type, description);
+        return String.format("#%d [%s] %s%s %s %s (%s)",
+                transactionId, timestamp, amount.signum() >= 0 ? "+" : "", amount.setScale(2, RoundingMode.HALF_UP), currency, type, description);
     }
 }

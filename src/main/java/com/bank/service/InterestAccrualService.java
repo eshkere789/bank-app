@@ -43,7 +43,7 @@ public class InterestAccrualService {
 
         Transaction transaction = new Transaction(
                 idGenerator.nextTransactionId(), account.getAccountId(), TransactionType.INTEREST_ACCRUAL,
-                interest, LocalDateTime.now(),
+                interest, account.getCurrency(), LocalDateTime.now(),
                 "Начисление процентов за месяц " + account.getMonthsAccrued() + " из " + account.getTermMonths());
         transactionRepository.save(transaction);
         account.addTransaction(transaction);

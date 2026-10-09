@@ -3,12 +3,14 @@ package com.bank.service;
 import com.bank.domain.account.Account;
 import com.bank.domain.credit.Credit;
 import com.bank.domain.credit.CreditStatus;
+import com.bank.domain.currency.Currency;
 import com.bank.domain.transaction.Transaction;
 import com.bank.domain.transaction.TransactionType;
 import com.bank.exception.CreditException;
 import com.bank.repository.TransactionRepository;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -29,14 +31,17 @@ public class CreditRepaymentService {
     private final AccountService accountService;
     private final TransactionRepository transactionRepository;
     private final IdGeneratorService idGenerator;
+    private final ExchangeRateService exchangeRateService;
 
     public CreditRepaymentService(CreditService creditService, AccountService accountService,
                                   TransactionRepository transactionRepository,
-                                  IdGeneratorService idGenerator) {
+                                  IdGeneratorService idGenerator,
+                                  ExchangeRateService exchangeRateService) {
         this.creditService = creditService;
         this.accountService = accountService;
         this.transactionRepository = transactionRepository;
         this.idGenerator = idGenerator;
+        this.exchangeRateService = exchangeRateService;
     }
 
     public List<Transaction> simulateMonths(long creditId, int months) {
@@ -86,11 +91,19 @@ public class CreditRepaymentService {
             if (left.signum() <= 0) {
                 break;
             }
-            BigDecimal taken = account.seize(left);
+            // Долг в тенге, а счёт может быть в USD/EUR: сколько нужно списать в валюте счёта
+            // (округляем вверх, чтобы покрыть долг без недобора в 1 тиын)
+            Currency accountCurrency = account.getCurrency();
+            BigDecimal neededInAccountCurrency =
+                    exchangeRateService.convert(left, Currency.KZT, accountCurrency, RoundingMode.CEILING);
+            BigDecimal taken = account.seize(neededInAccountCurrency);
             if (taken.signum() > 0) {
-                left = left.subtract(taken);
+                BigDecimal takenInKzt = exchangeRateService.convert(taken, accountCurrency, Currency.KZT).min(left);
+                left = left.subtract(takenInKzt);
+                String conversion = accountCurrency == Currency.KZT ? ""
+                        : " (" + taken + " " + accountCurrency + " ≈ " + takenInKzt + " KZT)";
                 operations.add(record(account, TransactionType.CREDIT_SEIZURE, taken.negate(),
-                        "Принудительное списание в счёт кредита #" + credit.getCreditId()));
+                        "Принудительное списание в счёт кредита #" + credit.getCreditId() + conversion));
             }
         }
 
@@ -104,7 +117,7 @@ public class CreditRepaymentService {
     private Transaction record(Account account, TransactionType type, BigDecimal amount, String description) {
         Transaction transaction = new Transaction(
                 idGenerator.nextTransactionId(), account.getAccountId(), type,
-                amount, LocalDateTime.now(), description);
+                amount, account.getCurrency(), LocalDateTime.now(), description);
         transactionRepository.save(transaction);
         account.addTransaction(transaction);
         return transaction;

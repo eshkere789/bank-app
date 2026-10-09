@@ -1,5 +1,6 @@
 package com.bank.console;
 
+import com.bank.domain.currency.Currency;
 import com.bank.domain.transaction.Transaction;
 import com.bank.domain.transaction.TransactionType;
 import com.bank.util.MoneyUtils;
@@ -20,9 +21,11 @@ public final class TransactionFormatter {
         int i = 0;
         while (i < transactions.size()) {
             TransactionType type = transactions.get(i).getType();
+            Currency currency = transactions.get(i).getCurrency();
             BigDecimal sum = BigDecimal.ZERO;
             int j = i;
-            while (j < transactions.size() && transactions.get(j).getType() == type) {
+            while (j < transactions.size() && transactions.get(j).getType() == type
+                    && transactions.get(j).getCurrency() == currency) {
                 sum = sum.add(transactions.get(j).getAmount());
                 j++;
             }
@@ -32,8 +35,8 @@ public final class TransactionFormatter {
                 System.out.println(indent + first);
             } else {
                 Transaction last = transactions.get(j - 1);
-                System.out.printf("%s%s ×%d | итого %s%s | #%d…#%d | %s → %s%n",
-                        indent, type, count, sum.signum() >= 0 ? "+" : "", MoneyUtils.normalize(sum),
+                System.out.printf("%s%s ×%d | итого %s%s %s | #%d…#%d | %s → %s%n",
+                        indent, type, count, sum.signum() >= 0 ? "+" : "", MoneyUtils.normalize(sum), currency,
                         first.getTransactionId(), last.getTransactionId(),
                         first.getDescription(), last.getDescription());
             }

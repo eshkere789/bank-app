@@ -1,5 +1,7 @@
 package com.bank.domain.account;
 
+import com.bank.domain.currency.Currency;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
@@ -9,10 +11,10 @@ import java.time.LocalDate;
  */
 public final class AccumulativeDepositAccount extends DepositAccount {
 
-    public AccumulativeDepositAccount(long accountId, String accountNumber, long customerId,
+    public AccumulativeDepositAccount(long accountId, String accountNumber, long customerId, Currency currency,
                                        BigDecimal initialBalance, BigDecimal interestRate,
                                        int termMonths, LocalDate openDate) {
-        super(accountId, accountNumber, customerId, initialBalance, interestRate, termMonths, openDate);
+        super(accountId, accountNumber, customerId, currency, initialBalance, interestRate, termMonths, openDate);
     }
 
     @Override
